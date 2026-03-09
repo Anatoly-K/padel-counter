@@ -1,0 +1,11 @@
+{
+  "name": "padel-counter",
+  "version": "1.0.0",
+  "description": "Padel score counter web app",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

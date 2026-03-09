@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Padel Score</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --court: #0f1a2e;
+    --my: #00e5ff;
+    --opp: #ff3d6b;
+    --dim: #1a2540;
+    --text: #e8f4f8;
+    --muted: #3a5068;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* animated court lines background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(90deg, transparent 49.5%, var(--muted) 49.5%, var(--muted) 50.5%, transparent 50.5%),
+      linear-gradient(0deg, transparent 29.5%, var(--muted) 29.5%, var(--muted) 30.5%, transparent 30.5%),
+      linear-gradient(0deg, transparent 69.5%, var(--muted) 69.5%, var(--muted) 70.5%, transparent 70.5%);
+    opacity: 0.07;
+    pointer-events: none;
+  }
+
+  /* top status bar */
+  #status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 10px;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  #ble-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: color 0.3s;
+  }
+  #ble-status.connected { color: var(--my); }
+  #ble-status.error { color: var(--opp); }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+  }
+  #ble-status.connected .dot { animation: pulse-fast 1s infinite; }
+  #ble-status:not(.connected):not(.error) .dot { background: var(--muted); animation: none; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes pulse-fast { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  #title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+  }
+
+  #sound-toggle {
+    cursor: pointer;
+    font-size: 16px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+  #sound-toggle.on { opacity: 1; }
+
+  /* main score area */
+  #scoreboard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    gap: 8px;
+  }
+
+  /* set history */
+  #sets {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    min-height: 28px;
+    align-items: center;
+  }
+
+  .set-bubble {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    background: var(--dim);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+  .set-bubble .s-my { color: var(--my); }
+  .set-bubble .s-opp { color: var(--opp); }
+  .set-bubble span { color: var(--muted); }
+
+  /* team labels */
+  .team-row {
+    display: flex;
+    width: 100%;
+    max-width: 360px;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0 4px;
+    margin-bottom: 2px;
+  }
+  .team-label {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .team-label.my { color: var(--my); }
+  .team-label.opp { color: var(--opp); }
+
+  /* big score */
+  #score-display {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 360px;
+    background: var(--court);
+    border-radius: 16px;
+    border: 1px solid var(--dim);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .score-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 8px;
+    position: relative;
+    transition: background 0.15s;
+  }
+  .score-side.flash-my { animation: flash-my 0.25s ease-out; }
+  .score-side.flash-opp { animation: flash-opp 0.25s ease-out; }
+
+  @keyframes flash-my {
+    0% { background: rgba(0,229,255,0.25); }
+    100% { background: transparent; }
+  }
+  @keyframes flash-opp {
+    0% { background: rgba(255,61,107,0.25); }
+    100% { background: transparent; }
+  }
+
+  .score-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 96px;
+    line-height: 1;
+    transition: transform 0.1s;
+  }
+  .score-num.my { color: var(--my); }
+  .score-num.opp { color: var(--opp); }
+  .score-num.bump { animation: bump 0.15s ease-out; }
+  @keyframes bump { 0%{transform:scale(1.18)} 100%{transform:scale(1)} }
+
+  .divider {
+    width: 1px;
+    height: 80px;
+    background: var(--dim);
+    flex-shrink: 0;
+  }
+
+  /* game score row */
+  #games-row {
+    display: flex;
+    width: 100%;
+    max-width: 360px;
+    background: var(--dim);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .game-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    font-size: 22px;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.05em;
+  }
+  .game-side.my { color: var(--my); }
+  .game-side.opp { color: var(--opp); }
+  .game-divider {
+    width: 1px;
+    background: var(--muted);
+    opacity: 0.3;
+  }
+  .game-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  /* undo button */
+  #undo-btn {
+    margin-top: 12px;
+    background: none;
+    border: 1px solid var(--dim);
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  #undo-btn:active { border-color: var(--opp); color: var(--opp); }
+
+  /* connect prompt */
+  #connect-prompt {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,15,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+  }
+  #connect-prompt.hidden { display: none; }
+
+  #connect-prompt h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 0.2em;
+    color: var(--text);
+  }
+  #connect-prompt p {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-align: center;
+    padding: 0 40px;
+  }
+
+  #connect-btn {
+    background: var(--my);
+    color: var(--bg);
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.2em;
+    padding: 14px 40px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+  #connect-btn:active { transform: scale(0.97); }
+  #connect-btn.loading { opacity: 0.6; pointer-events: none; }
+
+  #skip-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* set won overlay */
+  #set-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,15,0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    z-index: 20;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #set-overlay.show { opacity: 1; pointer-events: all; }
+  #set-overlay h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    letter-spacing: 0.2em;
+  }
+  #set-overlay p { font-size: 13px; color: var(--muted); letter-spacing: 0.1em; }
+  #next-set-btn {
+    margin-top: 8px;
+    background: none;
+    border: 1px solid var(--text);
+    color: var(--text);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding: 12px 32px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="status-bar">
+  <div id="ble-status" onclick="connectBLE()">
+    <div class="dot"></div>
+    <span id="ble-text">tap to connect</span>
+  </div>
+  <div id="title">Padel Score</div>
+  <div id="sound-toggle" onclick="toggleSound()">🔊</div>
+</div>
+
+<div id="scoreboard">
+  <div id="sets"></div>
+
+  <div class="team-row">
+    <div class="team-label my">You</div>
+    <div class="team-label opp">Them</div>
+  </div>
+
+  <div id="score-display">
+    <div class="score-side" id="side-my">
+      <div class="score-num my" id="score-my">0</div>
+    </div>
+    <div class="divider"></div>
+    <div class="score-side" id="side-opp">
+      <div class="score-num opp" id="score-opp">0</div>
+    </div>
+  </div>
+
+  <div class="game-label">GAMES</div>
+  <div id="games-row">
+    <div class="game-side my" id="games-my">0</div>
+    <div class="game-divider"></div>
+    <div class="game-side opp" id="games-opp">0</div>
+  </div>
+
+  <button id="undo-btn" onclick="undo()">↩ undo last point</button>
+</div>
+
+<!-- connect prompt -->
+<div id="connect-prompt">
+  <h2>Padel Score</h2>
+  <p>Connect your clicker via Bluetooth to track score automatically, or use manually.</p>
+  <button id="connect-btn" onclick="connectBLE()">Connect Clicker</button>
+  <button id="skip-btn" onclick="skipConnect()">Use manually</button>
+</div>
+
+<!-- set won overlay -->
+<div id="set-overlay">
+  <h2 id="set-winner-text">SET WON</h2>
+  <p id="set-score-text"></p>
+  <button id="next-set-btn" onclick="nextSet()">Next Set →</button>
+</div>
+
+<script>
+// ── BLE ──────────────────────────────────────────────────────
+const SERVICE_UUID        = '12345678-1234-1234-1234-123456789abc';
+const CHARACTERISTIC_UUID = 'abcd1234-ab12-ab12-ab12-abcdef123456';
+let bleDevice = null;
+let bleChar   = null;
+
+async function connectBLE() {
+  const btn = document.getElementById('connect-btn');
+  const status = document.getElementById('ble-status');
+  try {
+    btn.classList.add('loading');
+    btn.textContent = 'Searching...';
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'Padel Clicker' }],
+      optionalServices: [SERVICE_UUID]
+    });
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+    const server  = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
+    await bleChar.startNotifications();
+    bleChar.addEventListener('characteristicvaluechanged', onData);
+    setBLEStatus('connected');
+    skipConnect();
+  } catch(e) {
+    console.log('BLE error:', e);
+    setBLEStatus('error');
+    btn.classList.remove('loading');
+    btn.textContent = 'Connect Clicker';
+  }
+}
+
+function onDisconnected() {
+  setBLEStatus('disconnected');
+  bleChar = null;
+}
+
+function onData(event) {
+  const val = new TextDecoder().decode(event.target.value);
+  if (val === '1') addPoint('my');
+  if (val === '2') addPoint('opp');
+}
+
+function setBLEStatus(state) {
+  const el = document.getElementById('ble-status');
+  const txt = document.getElementById('ble-text');
+  el.className = '';
+  if (state === 'connected') { el.classList.add('connected'); txt.textContent = 'connected'; }
+  else if (state === 'error') { el.classList.add('error'); txt.textContent = 'error — retry'; }
+  else { txt.textContent = 'tap to connect'; }
+}
+
+function skipConnect() {
+  document.getElementById('connect-prompt').classList.add('hidden');
+}
+
+// ── SCORE STATE ───────────────────────────────────────────────
+let state = {
+  points: [0, 0],  // current game points
+  games:  [0, 0],  // current set games
+  sets:   [],      // completed sets [{my, opp}]
+};
+let history = [];  // for undo
+let soundOn = true;
+
+function addPoint(who) {
+  history.push(JSON.parse(JSON.stringify(state)));
+  const i = who === 'my' ? 0 : 1;
+  state.points[i]++;
+
+  // check game win: first to 4, must lead by 2 (simple version)
+  const [p0, p1] = state.points;
+  const maxP = Math.max(p0, p1);
+  const minP = Math.min(p0, p1);
+  if (maxP >= 4 && maxP - minP >= 2) {
+    const gameWinner = p0 > p1 ? 0 : 1;
+    state.games[gameWinner]++;
+    state.points = [0, 0];
+
+    // check set win: first to 6, must lead by 2 (or tiebreak at 6-6)
+    const [g0, g1] = state.games;
+    const maxG = Math.max(g0, g1);
+    const minG = Math.min(g0, g1);
+    if ((maxG >= 6 && maxG - minG >= 2) || maxG === 7) {
+      const setWinner = g0 > g1 ? 0 : 1;
+      state.sets.push({ my: g0, opp: g1 });
+      state.games = [0, 0];
+      showSetOverlay(setWinner, g0, g1);
+    }
+  }
+
+  render();
+  speak();
+  flashSide(who);
+}
+
+function undo() {
+  if (history.length === 0) return;
+  state = history.pop();
+  render();
+}
+
+function nextSet() {
+  document.getElementById('set-overlay').classList.remove('show');
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function render() {
+  const [p0, p1] = state.points;
+  const [g0, g1] = state.games;
+
+  setAndBump('score-my',  p0);
+  setAndBump('score-opp', p1);
+  document.getElementById('games-my').textContent  = g0;
+  document.getElementById('games-opp').textContent = g1;
+
+  // sets history
+  const setsEl = document.getElementById('sets');
+  setsEl.innerHTML = state.sets.map(s =>
+    `<div class="set-bubble">
+      <span class="s-my">${s.my}</span>
+      <span>:</span>
+      <span class="s-opp">${s.opp}</span>
+    </div>`
+  ).join('');
+}
+
+function setAndBump(id, val) {
+  const el = document.getElementById(id);
+  if (el.textContent !== String(val)) {
+    el.textContent = val;
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
+}
+
+function flashSide(who) {
+  const id = who === 'my' ? 'side-my' : 'side-opp';
+  const cls = who === 'my' ? 'flash-my' : 'flash-opp';
+  const el = document.getElementById(id);
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 300);
+}
+
+function showSetOverlay(winner, g0, g1) {
+  const overlay = document.getElementById('set-overlay');
+  document.getElementById('set-winner-text').textContent =
+    winner === 0 ? 'SET: YOU WIN' : 'SET: THEY WIN';
+  document.getElementById('set-winner-text').style.color =
+    winner === 0 ? 'var(--my)' : 'var(--opp)';
+  document.getElementById('set-score-text').textContent = `${g0} – ${g1}`;
+  overlay.classList.add('show');
+}
+
+// ── SPEECH ────────────────────────────────────────────────────
+function speak() {
+  if (!soundOn || !window.speechSynthesis) return;
+  const [p0, p1] = state.points;
+  const [g0, g1] = state.games;
+  const text = `${p0} – ${p1}. Games: ${g0} – ${g1}`;
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'en-US';
+  utt.rate = 1.1;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utt);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  const el = document.getElementById('sound-toggle');
+  el.textContent = soundOn ? '🔊' : '🔇';
+  el.classList.toggle('on', soundOn);
+}
+
+// ── KEYBOARD (for testing on laptop) ─────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === '1') addPoint('my');
+  if (e.key === '2') addPoint('opp');
+  if (e.key === 'u') undo();
+});
+
+// ── INIT ──────────────────────────────────────────────────────
+document.getElementById('sound-toggle').classList.add('on');
+render();
+</script>
+</body>
+</html>
